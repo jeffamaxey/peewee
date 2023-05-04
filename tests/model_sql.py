@@ -151,7 +151,7 @@ class TestModelSQL(ModelDatabaseTestCase):
         users = User.select().where(User.username.in_(('foo', 'bar')))
         self.assertSQL(users, *expected)
 
-        users = User.select().where(User.username.in_(set(['foo', 'bar'])))
+        users = User.select().where(User.username.in_({'foo', 'bar'}))
         # Sets are unordered so params may be in either order:
         sql, params = __sql__(users)
         self.assertEqual(sql, expected[0])
@@ -500,24 +500,37 @@ class TestModelSQL(ModelDatabaseTestCase):
                                'WHERE ("t1"."last" = ?)'), ['cat'])
 
     def test_insert_returning(self):
+
         class TestDB(Database):
             returning_clause = True
 
+
+
         class User(Model):
-            username = CharField()
+
+
             class Meta:
+                username = CharField()
                 database = TestDB(None)
+
+
 
         query = User.insert({User.username: 'zaizee'})
         self.assertSQL(query, (
             'INSERT INTO "user" ("username") '
             'VALUES (?) RETURNING "user"."id"'), ['zaizee'])
 
+
+
         class Person(Model):
-            name = CharField()
-            ssn = CharField(primary_key=True)
+
+
             class Meta:
+                name = CharField()
+                ssn = CharField(primary_key=True)
                 database = TestDB(None)
+
+
 
         query = Person.insert({Person.name: 'charlie', Person.ssn: '123'})
         self.assertSQL(query, (
@@ -580,16 +593,23 @@ class TestModelSQL(ModelDatabaseTestCase):
                                    ' VALUES (?, ?)'), ['a', 'ca'])
 
     def test_insert_many_get_field_values(self):
+
         class User(TestModel):
             username = TextField(primary_key=True)
             class Meta:
                 database = self.database
 
+
+
         class Tweet(TestModel):
-            user = ForeignKeyField(User)
-            content = TextField()
+
+
             class Meta:
+                user = ForeignKeyField(User)
+                content = TextField()
                 database = self.database
+
+
 
         # Ensure we can handle any combination of insert-data key and field
         # list value.
@@ -629,6 +649,7 @@ class TestModelSQL(ModelDatabaseTestCase):
                 ['a', 'ca1', 'a', 'ca2', 'b', 'cb1', 'a', 'ca3'])
 
     def test_insert_many_dict_and_list(self):
+
         class R(TestModel):
             k = TextField(column_name='key')
             v = IntegerField(column_name='value', default=0)
@@ -652,10 +673,30 @@ class TestModelSQL(ModelDatabaseTestCase):
             R.insert_many(data, fields=[R.k, R.v]),
             R.insert_many(data, fields=['k', 'v']))
         for query in queries:
-            self.assertSQL(query, (
-                'INSERT INTO "r" ("key", "value") VALUES %s' % param_str),
-                ['k1', 1, 'k2', 2, 'k3', 3, 'k4', 4, 'k5', 5, 'k6', 6,
-                 'k7', 7, 'kx', 0, 'ky', 0])
+            self.assertSQL(
+                query,
+                f'INSERT INTO "r" ("key", "value") VALUES {param_str}',
+                [
+                    'k1',
+                    1,
+                    'k2',
+                    2,
+                    'k3',
+                    3,
+                    'k4',
+                    4,
+                    'k5',
+                    5,
+                    'k6',
+                    6,
+                    'k7',
+                    7,
+                    'kx',
+                    0,
+                    'ky',
+                    0,
+                ],
+            )
 
     def test_insert_modelalias(self):
         UA = User.alias('ua')

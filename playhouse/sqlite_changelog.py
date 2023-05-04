@@ -63,16 +63,18 @@ class ChangeLog(object):
                 continue
 
             column = field.column_name
-            new = 'NULL' if not use_new else 'NEW."%s"' % column
-            old = 'NULL' if not use_old else 'OLD."%s"' % column
+            new = f'NEW."{column}"' if use_new else 'NULL'
+            old = f'OLD."{column}"' if use_old else 'NULL'
 
             if isinstance(field, JSONField):
                 # Ensure that values are cast to JSON so that the serialization
                 # is preserved when calculating the old / new.
-                if use_old: old = 'json(%s)' % old
-                if use_new: new = 'json(%s)' % new
+                if use_old:
+                    old = f'json({old})'
+                if use_new:
+                    new = f'json({new})'
 
-            col_array.append("json_array('%s', %s, %s)" % (column, old, new))
+            col_array.append(f"json_array('{column}', {old}, {new})")
 
         return ', '.join(col_array)
 
@@ -108,8 +110,8 @@ class ChangeLog(object):
 
     def install(self, model, skip_fields=None, drop=True, insert=True,
                 update=True, delete=True, create_table=True):
-        ChangeLog = self.model
         if create_table:
+            ChangeLog = self.model
             ChangeLog.create_table()
 
         actions = list(zip((insert, update, delete), self._actions))

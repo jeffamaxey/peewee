@@ -8,10 +8,7 @@ from .base_models import *
 
 
 def lange(x, y=None):
-    if y is None:
-        value = range(x)
-    else:
-        value = range(x, y)
+    value = range(x) if y is None else range(x, y)
     return list(value)
 
 
@@ -36,7 +33,7 @@ class TestCursorWrapper(ModelTestCase):
         self.assertEqual(names(query[5:]), lange(5, 10))
         self.assertEqual(names(query[2:5]), lange(2, 5))
 
-        for i in range(2):
+        for _ in range(2):
             self.assertEqual(names(cursor), lange(10))
 
     def test_count(self):
@@ -62,9 +59,7 @@ class TestCursorWrapper(ModelTestCase):
             inner = []
             for o_user in query:
                 outer.append(int(o_user.username))
-                for i_user in query:
-                    inner.append(int(i_user.username))
-
+                inner.extend(int(i_user.username) for i_user in query)
             self.assertEqual(outer, lange(4))
             self.assertEqual(inner, lange(4) * 4)
 
@@ -74,12 +69,7 @@ class TestCursorWrapper(ModelTestCase):
         with self.assertQueryCount(1):
             query = User.select().order_by(User.id)
             cursor = query.execute()
-            for _ in range(2):
-                for user in cursor: pass
-
             it = iter(cursor)
-            for obj in it:
-                pass
             self.assertRaises(StopIteration, next, it)
             self.assertEqual([int(u.username) for u in cursor], lange(3))
             self.assertEqual(query[0].username, '0')
@@ -185,7 +175,7 @@ class TestSpecifyConverter(ModelTestCase):
     def test_specify_converter(self):
         D = lambda d: datetime.datetime(2020, 1, d)
         for i in range(1, 4):
-            Reg.create(key='k%s' % i, ts=D(i))
+            Reg.create(key=f'k{i}', ts=D(i))
 
         RA = Reg.alias()
         subq = RA.select(RA.key, RA.ts, RA.ts.alias('aliased'))

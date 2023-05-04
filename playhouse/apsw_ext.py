@@ -98,7 +98,7 @@ class APSWDatabase(SqliteExtDatabase):
         return cursor.getconnection().changes()
 
     def begin(self, lock_type='deferred'):
-        self.cursor().execute('begin %s;' % lock_type)
+        self.cursor().execute(f'begin {lock_type};')
 
     def commit(self):
         with __exception_wrapper__:
@@ -132,7 +132,7 @@ class BooleanField(_BooleanField):
     def db_value(self, v):
         v = super(BooleanField, self).db_value(v)
         if v is not None:
-            return v and 1 or 0
+            return 1 if v else 0
 
 class DateField(_DateField):
     db_value = nh

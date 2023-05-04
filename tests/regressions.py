@@ -91,9 +91,13 @@ class TestOverrideModelRepr(BaseTestCase):
         # classes that defined a __repr__() method had this override ignored
         # silently. This test ensures that it is possible to completely
         # override the model repr.
+
+
+
         class Foo(Model):
             def __repr__(self):
-                return 'FOO: %s' % self.id
+                return f'FOO: {self.id}'
+
 
         f = Foo(id=1337)
         self.assertEqual(repr(f), 'FOO: 1337')
@@ -124,11 +128,11 @@ class TestDeleteInstanceRegression(ModelTestCase):
             a1, a2, a3 = [DiA.create(a=a) for a in ('a1', 'a2', 'a3')]
             for a in (a1, a2, a3):
                 for j in (1, 2):
-                    b = DiB.create(a=a, b='%s-b%s' % (a.a, j))
-                    c = DiC.create(b=b, c='%s-c' % (b.b))
-                    d = DiD.create(c=c, d='%s-d' % (c.c))
+                    b = DiB.create(a=a, b=f'{a.a}-b{j}')
+                    c = DiC.create(b=b, c=f'{b.b}-c')
+                    d = DiD.create(c=c, d=f'{c.c}-d')
 
-                    DiBA.create(a=a, b='%s-b%s' % (a.a, j))
+                    DiBA.create(a=a, b=f'{a.a}-b{j}')
 
         # (a1 (b1 (c (d))), (b2 (c (d)))), (a2 ...), (a3 ...)
         with self.assertQueryCount(5):
@@ -328,9 +332,9 @@ class TestReturningIntegrationRegressions(ModelTestCase):
         subq = (Tweet
                 .select(fn.COUNT(Tweet.id).alias('ct'))
                 .where(Tweet.user == User.id))
-        query = (User
-                 .update(username=(User.username + '-x'))
-                 .returning(subq.alias('ct'), User.username))
+        query = User.update(username=f'{User.username}-x').returning(
+            subq.alias('ct'), User.username
+        )
         result = query.execute()
         self.assertEqual(sorted([(r.ct, r.username) for r in result]), [
             (0, 'zaizee-x'), (2, 'mickey-x'), (3, 'huey-x')])
@@ -382,10 +386,11 @@ class TestUpdateIntegrationRegressions(ModelTestCase):
     @skip_if(IS_MYSQL)
     def test_update_examples(self):
         # Do a simple update.
-        res = (User
-               .update(username=(User.username + '-cat'))
-               .where(User.username != 'mickey')
-               .execute())
+        res = (
+            User.update(username=f'{User.username}-cat')
+            .where(User.username != 'mickey')
+            .execute()
+        )
 
         users = User.select().order_by(User.username)
         self.assertEqual([u.username for u in users.clone()],
@@ -393,19 +398,21 @@ class TestUpdateIntegrationRegressions(ModelTestCase):
 
         # Do an update using a subquery..
         subq = User.select(User.username).where(User.username == 'mickey')
-        res = (User
-               .update(username=(User.username + '-dog'))
-               .where(User.username.in_(subq))
-               .execute())
+        res = (
+            User.update(username=f'{User.username}-dog')
+            .where(User.username.in_(subq))
+            .execute()
+        )
         self.assertEqual([u.username for u in users.clone()],
                          ['huey-cat', 'mickey-dog', 'zaizee-cat'])
 
         # Subquery referring to a different table.
         subq = User.select().where(User.username == 'mickey-dog')
-        res = (Tweet
-               .update(content=(Tweet.content + '-x'))
-               .where(Tweet.user.in_(subq))
-               .execute())
+        res = (
+            Tweet.update(content=f'{Tweet.content}-x')
+            .where(Tweet.user.in_(subq))
+            .execute()
+        )
 
         self.assertEqual(
             [t.content for t in Tweet.select().order_by(Tweet.id)],
@@ -415,7 +422,7 @@ class TestUpdateIntegrationRegressions(ModelTestCase):
         subq = (Tweet
                 .select(fn.COUNT(Tweet.id).cast('text'))
                 .where(Tweet.user == User.id))
-        res = User.update(username=(User.username + '-' + subq)).execute()
+        res = User.update(username=f'{User.username}-{subq}').execute()
 
         self.assertEqual([u.username for u in users.clone()],
                          ['huey-cat-3', 'mickey-dog-2', 'zaizee-cat-0'])
@@ -496,10 +503,9 @@ class BaseVersionedModel(TestModel):
             # a new version. How you handle this situation is up to you,
             # but for simplicity I'm just raising an exception.
             raise ConflictDetectedException()
-        else:
-            # Increment local version to match what is now in the db.
-            self.version += 1
-            return True
+        # Increment local version to match what is now in the db.
+        self.version += 1
+        return True
 
 class VUser(BaseVersionedModel):
     username = TextField()
@@ -591,7 +597,7 @@ class TestJoinSubqueryAggregateViaLeftOuter(ModelTestCase):
             games = []
             for p in (p1, p2):
                 for gnum in (1, 2):
-                    g = Game.create(name='%s-g%s' % (p.name, gnum), player=p)
+                    g = Game.create(name=f'{p.name}-g{gnum}', player=p)
                     games.append(g)
 
             score_list = (
@@ -785,7 +791,7 @@ class TestRegressionCountDistinct(ModelTestCase):
         rs = RS.create(name='rs')
 
         nums = [0, 1, 2, 3, 2, 1, 0]
-        RD.insert_many([('k%s' % i, i, rs) for i in nums]).execute()
+        RD.insert_many([(f'k{i}', i, rs) for i in nums]).execute()
 
         query = RD.select(RD.key).distinct()
         self.assertEqual(query.count(), 4)
@@ -806,7 +812,7 @@ class TestRegressionCountDistinct(ModelTestCase):
 
     @requires_models(RKV)
     def test_regression_count_distinct_cpk(self):
-        RKV.insert_many([('k%s' % i, i, i) for i in range(5)]).execute()
+        RKV.insert_many([(f'k{i}', i, i) for i in range(5)]).execute()
         self.assertEqual(RKV.select().distinct().count(), 5)
 
 
@@ -814,7 +820,7 @@ class TestReselectModelRegression(ModelTestCase):
     requires = [User]
 
     def test_reselect_model_regression(self):
-        u1, u2, u3 = [User.create(username='u%s' % i) for i in '123']
+        u1, u2, u3 = [User.create(username=f'u{i}') for i in '123']
 
         query = User.select(User.username).order_by(User.username.desc())
         self.assertEqual(list(query.tuples()), [('u3',), ('u2',), ('u1',)])
@@ -831,9 +837,9 @@ class TestJoinCorrelatedSubquery(ModelTestCase):
 
     def test_join_correlated_subquery(self):
         for i in range(3):
-            user = User.create(username='u%s' % i)
+            user = User.create(username=f'u{i}')
             for j in range(i + 1):
-                Tweet.create(user=user, content='u%s-%s' % (i, j))
+                Tweet.create(user=user, content=f'u{i}-{j}')
 
         UA = User.alias()
         subq = (UA
@@ -952,7 +958,7 @@ class TestLikeColumnValue(ModelTestCase):
 
     def test_like_column_value(self):
         # e.g., find all tweets that contain the users own username.
-        u1, u2, u3 = [User.create(username='u%s' % i) for i in (1, 2, 3)]
+        u1, u2, u3 = [User.create(username=f'u{i}') for i in (1, 2, 3)]
         data = (
             (u1, ('nada', 'i am u1', 'u1 is my name')),
             (u2, ('nothing', 'he is u1')),
@@ -962,8 +968,9 @@ class TestLikeColumnValue(ModelTestCase):
                               fields=[Tweet.user, Tweet.content]).execute()
 
         expressions = (
-            (Tweet.content ** ('%' + User.username + '%')),
-            Tweet.content.contains(User.username))
+            Tweet.content ** f'%{User.username}%',
+            Tweet.content.contains(User.username),
+        )
 
         for expr in expressions:
             query = (Tweet
@@ -1215,9 +1222,7 @@ class TestBulkCreateWithFK(ModelTestCase):
         u1 = BCUser.create(username='u1')
         u2 = BCUser.create(username='u2')
         with self.assertQueryCount(1):
-            BCTweet.bulk_create([
-                BCTweet(user='u1', content='t%s' % i)
-                for i in range(4)])
+            BCTweet.bulk_create([BCTweet(user='u1', content=f't{i}') for i in range(4)])
 
         self.assertEqual(BCTweet.select().where(BCTweet.user == 'u1').count(), 4)
         self.assertEqual(BCTweet.select().where(BCTweet.user != 'u1').count(), 0)
@@ -1278,7 +1283,7 @@ class TestBulkUpdateNonIntegerPK(ModelTestCase):
 
     @requires_models(CharPKKV)
     def test_bulk_update_non_integer_pk(self):
-        a, b, c = [CharPKKV.create(id=c, key='k%s' % c) for c in 'abc']
+        a, b, c = [CharPKKV.create(id=c, key=f'k{c}') for c in 'abc']
         a.key = 'ka-x'
         a.value = 1
         b.value = 2
@@ -1511,7 +1516,7 @@ class TestModelSelectFromSubquery(ModelTestCase):
 
     def test_model_select_from_subquery(self):
         for i in range(5):
-            User.create(username='u%s' % i)
+            User.create(username=f'u{i}')
 
         UA = User.alias()
         subquery = (UA.select()
@@ -1546,7 +1551,7 @@ class TestModelConversionRegression(ModelTestCase):
     requires = [CharPK, CharFK]
 
     def test_model_conversion_regression(self):
-        cpks = [CharPK.create(id=str(i), name='u%s' % i) for i in range(3)]
+        cpks = [CharPK.create(id=str(i), name=f'u{i}') for i in range(3)]
 
         query = CharPK.select().where(CharPK.id << cpks)
         self.assertEqual(sorted([c.id for c in query]), ['0', '1', '2'])
@@ -1555,8 +1560,8 @@ class TestModelConversionRegression(ModelTestCase):
         self.assertEqual(sorted([c.id for c in query]), ['0', '1', '2'])
 
     def test_model_conversion_fk_retained(self):
-        cpks = [CharPK.create(id=str(i), name='u%s' % i) for i in range(3)]
-        cfks = [CharFK.create(id=i + 1, cpk='u%s' % i) for i in range(3)]
+        cpks = [CharPK.create(id=str(i), name=f'u{i}') for i in range(3)]
+        cfks = [CharFK.create(id=i + 1, cpk=f'u{i}') for i in range(3)]
 
         c0, c1, c2 = cpks
         query = CharFK.select().where(CharFK.cpk << [c0, c2])
@@ -1628,7 +1633,7 @@ class TestBulkUpdateAllNull(ModelTestCase):
         NDF.bulk_update(rows, fields=['date'])
 
         query = NDF.select().order_by(NDF.key).tuples()
-        self.assertEqual([r for r in query], [('n1', None), ('n2', None)])
+        self.assertEqual(list(query), [('n1', None), ('n2', None)])
 
 
 class CQA(TestModel):

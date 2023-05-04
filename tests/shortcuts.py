@@ -281,8 +281,7 @@ class TestModelToDict(ModelTestCase):
                 {'id': 2, 'name': 's2'}]}])
 
     def test_recurse_max_depth(self):
-        t0, t1, t2 = [Tweet.create(user=self.user, content='t%s' % i)
-                      for i in range(3)]
+        t0, t1, t2 = [Tweet.create(user=self.user, content=f't{i}') for i in range(3)]
         tag0, tag1 = [Tag.create(tag=t) for t in ['tag0', 'tag1']]
         TweetTag.create(tweet=t0, tag=tag0)
         TweetTag.create(tweet=t0, tag=tag1)
@@ -391,7 +390,7 @@ class TestModelToDict(ModelTestCase):
         for i in range(3):
             user = User.create(username='u%d' % i)
             for x in range(i + 1):
-                Tweet.create(user=user, content='%s-%s' % (user.username, x))
+                Tweet.create(user=user, content=f'{user.username}-{x}')
 
         query = (User
                  .select(User.username, fn.COUNT(Tweet.id).alias('ct'))
@@ -650,7 +649,7 @@ class TestResolveMultiModelQuery(ModelTestCase):
         mmb = MMB.select(MMB.key, Value(99).alias('value'))
         mmc = MMC.select(MMC.key, MMC.value)
         query = (mma | mmb | mmc).order_by(SQL('1'))
-        data = [obj for obj in resolve_multimodel_query(query)]
+        data = list(resolve_multimodel_query(query))
 
         expected = [
             MMA(key='k0', value=0), MMA(key='k1', value=1),

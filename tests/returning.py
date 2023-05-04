@@ -65,9 +65,9 @@ class TestReturningIntegration(ModelTestCase):
         self.assertEqual([(r.k, r.v, r.s) for r in iq.execute()], [
             ('k1', 1, 11), ('k2', 2, 22)])
 
-        uq = (Reg
-              .update({Reg.k: Reg.k + 'x', Reg.v: Reg.v + 1})
-              .returning(Reg.k, Reg.v, Rs))
+        uq = Reg.update({Reg.k: f'{Reg.k}x', Reg.v: Reg.v + 1}).returning(
+            Reg.k, Reg.v, Rs
+        )
         self.assertEqual([(r.k, r.v, r.s) for r in uq.execute()], [
             ('k1x', 2, 12), ('k2x', 3, 23)])
 
@@ -90,9 +90,9 @@ class TestReturningIntegration(ModelTestCase):
             self.assertEqual([r2t(r) for r in qconv(iq).execute()], [
                 ('k1', 1, 11), ('k2', 2, 22)])
 
-            uq = (Reg
-                  .update({Reg.k: Reg.k + 'x', Reg.v: Reg.v + 1})
-                  .returning(Reg.k, Reg.v, Rs))
+            uq = Reg.update({Reg.k: f'{Reg.k}x', Reg.v: Reg.v + 1}).returning(
+                Reg.k, Reg.v, Rs
+            )
             self.assertEqual([r2t(r) for r in qconv(uq).execute()], [
                 ('k1x', 2, 12), ('k2x', 3, 23)])
 

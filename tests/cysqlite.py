@@ -346,9 +346,10 @@ class TestBloomFilterIntegration(CyDatabaseTestCase):
             for i in 'abcdefghijklmnopqrstuvwxyz':
                 keys = [i * j for j in range(1, 10)]
                 accum.extend(keys)
-                self.execute('insert into register (data) values %s' %
-                             ', '.join(['(?)'] * len(keys)),
-                             *keys)
+                self.execute(
+                    f"insert into register (data) values {', '.join(['(?)'] * len(keys))}",
+                    *keys,
+                )
 
         curs = self.execute('select * from register '
                             'order by data limit 5 offset 6')
@@ -390,9 +391,9 @@ class TestBloomFilter(BaseTestCase):
             self.assertTrue(key in self.bf)
 
         for key in keys:
-            self.assertFalse(key + '-x' in self.bf)
-            self.assertFalse(key + '-y' in self.bf)
-            self.assertFalse(key + ' ' in self.bf)
+            self.assertFalse(f'{key}-x' in self.bf)
+            self.assertFalse(f'{key}-y' in self.bf)
+            self.assertFalse(f'{key} ' in self.bf)
 
     def test_bloomfilter_buffer(self):
         self.assertEqual(len(self.bf), self.n)
@@ -407,14 +408,14 @@ class TestBloomFilter(BaseTestCase):
 
         for key in keys:
             self.assertTrue(key in self.bf)
-            self.assertFalse(key + '-x' in self.bf)
+            self.assertFalse(f'{key}-x' in self.bf)
 
         # Convert to buffer and then populate a 2nd bloom-filter.
         buf = self.bf.to_buffer()
         new_bf = BloomFilter.from_buffer(buf)
         for key in keys:
             self.assertTrue(key in new_bf)
-            self.assertFalse(key + '-x' in new_bf)
+            self.assertFalse(f'{key}-x' in new_bf)
 
         # Ensure that the two underlying bloom-filter buffers are equal.
         self.assertEqual(len(new_bf), self.n)
@@ -441,7 +442,7 @@ class DataTypes(TableFunction):
 
     def iterate(self, idx):
         if idx < self.n:
-            return ('k%s' % idx, self.values[idx])
+            return f'k{idx}', self.values[idx]
         raise StopIteration
 
 

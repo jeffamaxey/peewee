@@ -33,7 +33,7 @@ class Person(TestModel):
 
     @hybrid_property
     def full_name(self):
-        return self.first + ' ' + self.last
+        return f'{self.first} {self.last}'
 
 
 class TestHybridProperties(ModelTestCase):
@@ -115,7 +115,7 @@ class Order(TestModel):
 
     @hybrid_property
     def quantity(self):
-        return sum([item.qt for item in self.items])
+        return sum(item.qt for item in self.items)
 
     @quantity.expression
     def quantity(cls):

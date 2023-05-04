@@ -228,7 +228,7 @@ class SqliteQueueDatabase(SqliteExtDatabase):
             return {'journal_mode': 'wal'}
 
         if not isinstance(pragmas, dict):
-            pragmas = dict((k.lower(), v) for (k, v) in pragmas)
+            pragmas = {k.lower(): v for (k, v) in pragmas}
         if pragmas.get('journal_mode', 'wal').lower() != 'wal':
             raise ValueError(self.WAL_MODE_ERROR_MESSAGE)
 

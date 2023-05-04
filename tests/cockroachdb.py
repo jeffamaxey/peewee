@@ -141,10 +141,13 @@ class TestCockroachDatabase(ModelTestCase):
     @requires_models(KV)
     def test_run_transaction_helper(self):
         def succeeds(db):
-            KV.insert_many([('k%s' % i, i) for i in range(10)]).execute()
+            KV.insert_many([(f'k{i}', i) for i in range(10)]).execute()
+
         run_transaction(self.database, succeeds)
-        self.assertEqual([(kv.k, kv.v) for kv in KV.select().order_by(KV.k)],
-                         [('k%s' % i, i) for i in range(10)])
+        self.assertEqual(
+            [(kv.k, kv.v) for kv in KV.select().order_by(KV.k)],
+            [(f'k{i}', i) for i in range(10)],
+        )
 
     @requires_models(KV)
     def test_cannot_nest_run_transaction(self):
@@ -175,7 +178,7 @@ class TestCockroachDatabase(ModelTestCase):
         def retry_decorator(db):
             content = []
             for i in range(5):
-                kv = KV.create(k='k%s' % i, v=i)
+                kv = KV.create(k=f'k{i}', v=i)
                 content.append(kv.k)
             return content
 
@@ -313,7 +316,7 @@ class TestCockroachDatabase(ModelTestCase):
     @requires_models(UID, UIDNote)
     def test_uuid_key_as_fk(self):
         # This is covered thoroughly elsewhere, but added here just for fun.
-        u1, u2, u3 = [UID.create(title='u%s' % i) for i in (1, 2, 3)]
+        u1, u2, u3 = [UID.create(title=f'u{i}') for i in (1, 2, 3)]
         UIDNote.create(uid=u1, note='u1-1')
         UIDNote.create(uid=u2, note='u2-1')
         UIDNote.create(uid=u2, note='u2-2')

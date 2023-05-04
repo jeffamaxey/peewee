@@ -201,7 +201,7 @@ else:
     __sqlite_version__ = (0, 0, 0)
 
 
-__date_parts__ = set(('year', 'month', 'day', 'hour', 'minute', 'second'))
+__date_parts__ = {'year', 'month', 'day', 'hour', 'minute', 'second'}
 
 # Sqlite does not support the `date_part` SQL function, so we will define an
 # implementation in python.
@@ -660,11 +660,7 @@ def query_to_string(query):
     # and this misuse could lead to sql injection vulnerabilities. This
     # function is intended for debugging or logging purposes ONLY.
     db = getattr(query, '_database', None)
-    if db is not None:
-        ctx = db.get_sql_context()
-    else:
-        ctx = Context()
-
+    ctx = db.get_sql_context() if db is not None else Context()
     sql, params = ctx.sql(query).query()
     if not params:
         return sql
@@ -679,15 +675,15 @@ def _query_val_transform(v):
     # Interpolate parameters.
     if isinstance(v, (text_type, datetime.datetime, datetime.date,
                       datetime.time)):
-        v = "'%s'" % v
+        v = f"'{v}'"
     elif isinstance(v, bytes_type):
         try:
             v = v.decode('utf8')
         except UnicodeDecodeError:
             v = v.decode('raw_unicode_escape')
-        v = "'%s'" % v
+        v = f"'{v}'"
     elif isinstance(v, int):
-        v = '%s' % int(v)  # Also handles booleans -> 1 or 0.
+        v = f'{int(v)}'
     elif v is None:
         v = 'NULL'
     else:
@@ -745,9 +741,7 @@ class _DynamicColumn(object):
     __slots__ = ()
 
     def __get__(self, instance, instance_type=None):
-        if instance is not None:
-            return ColumnFactory(instance)  # Implements __getattr__().
-        return self
+        return ColumnFactory(instance) if instance is not None else self
 
 
 class _ExplicitColumn(object):
@@ -788,9 +782,7 @@ class Source(Node):
                    materialized=materialized)
 
     def get_sort_key(self, ctx):
-        if self._alias:
-            return (self._alias,)
-        return (ctx.alias_manager[self],)
+        return (self._alias, ) if self._alias else (ctx.alias_manager[self], )
 
     def apply_alias(self, ctx):
         # If we are defining the source, include the "AS alias" declaration. An
@@ -850,9 +842,8 @@ def __bind_database__(meth):
     @wraps(meth)
     def inner(self, *args, **kwargs):
         result = meth(self, *args, **kwargs)
-        if self._database:
-            return result.bind(self._database)
-        return result
+        return result.bind(self._database) if self._database else result
+
     return inner
 
 
@@ -1029,7 +1020,7 @@ class ValuesList(_HashableSource, BaseTable):
         if self._alias:
             ctx.alias_manager[self] = self._alias
 
-        if ctx.scope == SCOPE_SOURCE or ctx.scope == SCOPE_NORMAL:
+        if ctx.scope in [SCOPE_SOURCE, SCOPE_NORMAL]:
             with ctx(parentheses=not ctx.parentheses):
                 ctx = (ctx
                        .literal('VALUES ')
@@ -1118,9 +1109,7 @@ class ColumnBase(Node):
         self._converter = converter
 
     def alias(self, alias):
-        if alias:
-            return Alias(self, alias)
-        return self
+        return Alias(self, alias) if alias else self
 
     def unalias(self):
         return self
@@ -1145,9 +1134,8 @@ class ColumnBase(Node):
         consisting of the left-hand and right-hand operands, using `op`.
         """
         def inner(self, rhs):
-            if inv:
-                return Expression(rhs, op, self)
-            return Expression(self, op, rhs)
+            return Expression(rhs, op, self) if inv else Expression(self, op, rhs)
+
         return inner
     __and__ = _e(OP.AND)
     __or__ = _e(OP.OR)
@@ -1239,7 +1227,7 @@ class ColumnBase(Node):
         return NodeList((SQL('DISTINCT'), self))
 
     def collate(self, collation):
-        return NodeList((self, SQL('COLLATE %s' % collation)))
+        return NodeList((self, SQL(f'COLLATE {collation}')))
 
     def get_sort_key(self, ctx):
         return ()
@@ -1262,9 +1250,8 @@ class Column(ColumnBase):
     def __sql__(self, ctx):
         if ctx.scope == SCOPE_VALUES:
             return ctx.sql(Entity(self.name))
-        else:
-            with ctx.scope_column():
-                return ctx.sql(self.source).literal('.').sql(Entity(self.name))
+        with ctx.scope_column():
+            return ctx.sql(self.source).literal('.').sql(Entity(self.name))
 
 
 class WrappedNode(ColumnBase):
@@ -1291,9 +1278,7 @@ class EntityFactory(object):
 class _DynamicEntity(object):
     __slots__ = ()
     def __get__(self, instance, instance_type=None):
-        if instance is not None:
-            return EntityFactory(instance._alias)  # Implements __getattr__().
-        return self
+        return EntityFactory(instance._alias) if instance is not None else self
 
 
 class Alias(WrappedNode):
@@ -1307,10 +1292,7 @@ class Alias(WrappedNode):
         return hash(self._alias)
 
     def alias(self, alias=None):
-        if alias is None:
-            return self.node
-        else:
-            return Alias(self.node, alias)
+        return self.node if alias is None else Alias(self.node, alias)
 
     def unalias(self):
         return self.node
@@ -1426,11 +1408,11 @@ class Ordering(WrappedNode):
         if self.nulls and not ctx.state.nulls_ordering:
             ctx.sql(self._null_ordering_case(self.nulls)).literal(', ')
 
-        ctx.sql(self.node).literal(' %s' % self.direction)
+        ctx.sql(self.node).literal(f' {self.direction}')
         if self.collation:
-            ctx.literal(' COLLATE %s' % self.collation)
+            ctx.literal(f' COLLATE {self.collation}')
         if self.nulls and ctx.state.nulls_ordering:
-            ctx.literal(' NULLS %s' % self.nulls)
+            ctx.literal(f' NULLS {self.nulls}')
         return ctx
 
 
@@ -1521,10 +1503,8 @@ class SQL(ColumnBase):
 
 
 def Check(constraint, name=None):
-    check = SQL('CHECK (%s)' % constraint)
-    if not name:
-        return check
-    return NodeList((SQL('CONSTRAINT'), Entity(name), check))
+    check = SQL(f'CHECK ({constraint})')
+    return NodeList((SQL('CONSTRAINT'), Entity(name), check)) if name else check
 
 
 class Function(ColumnBase):
@@ -1693,15 +1673,11 @@ class Window(Node):
                     CommaNodeList(self.order_by)))
             if self.start is not None and self.end is not None:
                 frame = self.frame_type or 'ROWS'
-                parts.extend((
-                    SQL('%s BETWEEN' % frame),
-                    self.start,
-                    SQL('AND'),
-                    self.end))
+                parts.extend((SQL(f'{frame} BETWEEN'), self.start, SQL('AND'), self.end))
             elif self.start is not None:
                 parts.extend((SQL(self.frame_type or 'ROWS'), self.start))
             elif self.frame_type is not None:
-                parts.append(SQL('%s UNBOUNDED PRECEDING' % self.frame_type))
+                parts.append(SQL(f'{self.frame_type} UNBOUNDED PRECEDING'))
             if self._exclude is not None:
                 parts.extend((SQL('EXCLUDE'), self._exclude))
             ctx.sql(NodeList(parts))
@@ -1965,16 +1941,13 @@ class BaseQuery(Node):
         elif row_type == ROW.CONSTRUCTOR:
             return ObjectCursorWrapper(cursor, self._constructor)
         else:
-            raise ValueError('Unrecognized row type: "%s".' % row_type)
+            raise ValueError(f'Unrecognized row type: "{row_type}".')
 
     def __sql__(self, ctx):
         raise NotImplementedError
 
     def sql(self):
-        if self._database:
-            context = self._database.get_sql_context()
-        else:
-            context = Context()
+        context = self._database.get_sql_context() if self._database else Context()
         return context.parse(self)
 
     @database_required
@@ -1989,9 +1962,10 @@ class BaseQuery(Node):
 
     def _ensure_execution(self):
         if not self._cursor_wrapper:
-            if not self._database:
+            if self._database:
+                self.execute()
+            else:
                 raise ValueError('Query has not been executed.')
-            self.execute()
 
     def __iter__(self):
         self._ensure_execution()
@@ -1999,10 +1973,7 @@ class BaseQuery(Node):
 
     def __getitem__(self, value):
         self._ensure_execution()
-        if isinstance(value, slice):
-            index = value.stop
-        else:
-            index = value
+        index = value.stop if isinstance(value, slice) else value
         if index is not None:
             index = index + 1 if index >= 0 else 0
         self._cursor_wrapper.fill_cache(index)
@@ -2158,8 +2129,7 @@ class SelectBase(_HashableSource, Source, SelectQuery):
 
     @database_required
     def peek(self, database, n=1):
-        rows = self.execute(database)[:n]
-        if rows:
+        if rows := self.execute(database)[:n]:
             return rows[0] if n == 1 else rows
 
     @database_required
@@ -2257,7 +2227,7 @@ class CompoundSelectQuery(SelectBase):
             lhs_parens = self._wrap_parens(ctx, self.lhs)
             with ctx.scope_normal(parentheses=lhs_parens, subquery=False):
                 ctx.sql(self.lhs)
-            ctx.literal(' %s ' % self.op)
+            ctx.literal(f' {self.op} ')
             with ctx.push_alias():
                 # Should the right-hand query be wrapped in parentheses?
                 rhs_parens = self._wrap_parens(ctx, self.rhs)
@@ -2458,13 +2428,13 @@ class _WriteQuery(Query):
     def __init__(self, table, returning=None, **kwargs):
         self.table = table
         self._returning = returning
-        self._return_cursor = True if returning else False
+        self._return_cursor = bool(returning)
         super(_WriteQuery, self).__init__(**kwargs)
 
     @Node.copy
     def returning(self, *returning):
         self._returning = returning
-        self._return_cursor = True if returning else False
+        self._return_cursor = bool(returning)
 
     def apply_returning(self, ctx):
         if self._returning:
@@ -2486,9 +2456,7 @@ class _WriteQuery(Query):
         return self._cursor_wrapper
 
     def handle_result(self, database, cursor):
-        if self._return_cursor:
-            return cursor
-        return database.rows_affected(cursor)
+        return cursor if self._return_cursor else database.rows_affected(cursor)
 
     def _set_table_alias(self, ctx):
         ctx.alias_manager[self.table] = self.table.__name__
@@ -2521,10 +2489,7 @@ class Update(_WriteQuery):
             expressions = []
             for k, v in sorted(self._update.items(), key=ctx.column_sort_key):
                 if not isinstance(v, Node):
-                    if isinstance(k, Field):
-                        v = k.to_value(v)
-                    else:
-                        v = Value(v, unpack=False)
+                    v = k.to_value(v) if isinstance(k, Field) else Value(v, unpack=False)
                 elif isinstance(v, Model) and isinstance(k, ForeignKeyField):
                     # NB: we want to ensure that when passed a model instance
                     # in the context of a foreign-key, we apply the fk-specific
@@ -2625,9 +2590,7 @@ class Insert(_WriteQuery):
                 # Add any columns present in the default data that are not
                 # accounted for by the dictionary of row data.
                 column_set = set(accum)
-                for col in (set(defaults) - column_set):
-                    accum.append(col)
-
+                accum.extend(iter((set(defaults) - column_set)))
                 columns = sorted(accum, key=lambda obj: obj.get_sort_key(ctx))
             rows_iter = itertools.chain(iter((row,)), rows_iter)
         else:
@@ -2642,10 +2605,11 @@ class Insert(_WriteQuery):
                 seen.add(column_obj)
 
             columns = clean_columns
-            for col in sorted(defaults, key=lambda obj: obj.get_sort_key(ctx)):
-                if col not in seen:
-                    columns.append(col)
-
+            columns.extend(
+                col
+                for col in sorted(defaults, key=lambda obj: obj.get_sort_key(ctx))
+                if col not in seen
+            )
         fk_fields = set()
         nullable_columns = set()
         value_lookups = {}
@@ -2694,7 +2658,7 @@ class Insert(_WriteQuery):
                     elif column in nullable_columns:
                         val = None
                     else:
-                        raise ValueError('Missing value for %s.' % column.name)
+                        raise ValueError(f'Missing value for {column.name}.')
 
                 if not isinstance(val, Node) or (isinstance(val, Model) and
                                                  column in fk_fields):
@@ -2716,9 +2680,11 @@ class Insert(_WriteQuery):
                 .sql(self._insert))
 
     def _default_values(self, ctx):
-        if not self._database:
-            return ctx.literal('DEFAULT VALUES')
-        return self._database.default_values_insert(ctx)
+        return (
+            self._database.default_values_insert(ctx)
+            if self._database
+            else ctx.literal('DEFAULT VALUES')
+        )
 
     def __sql__(self, ctx):
         super(Insert, self).__sql__(ctx)
@@ -2788,7 +2754,7 @@ class Index(Node):
     def __init__(self, name, table, expressions, unique=False, safe=False,
                  where=None, using=None):
         self._name = name
-        self._table = Entity(table) if not isinstance(table, Table) else table
+        self._table = table if isinstance(table, Table) else Entity(table)
         self._expressions = expressions
         self._where = where
         self._unique = unique
@@ -2819,7 +2785,7 @@ class Index(Node):
             # Sqlite uses CREATE INDEX <schema>.<name> ON <table>, whereas most
             # others use: CREATE INDEX <name> ON <schema>.<table>.
             if ctx.state.index_schema_prefix and \
-               isinstance(self._table, Table) and self._table._schema:
+                   isinstance(self._table, Table) and self._table._schema:
                 index_name = Entity(self._table._schema, self._name)
                 table_name = Entity(self._table.__name__)
             else:
@@ -2828,8 +2794,8 @@ class Index(Node):
 
             ctx.sql(index_name)
             if self._using is not None and \
-               ctx.state.index_using_precedes_table:
-                ctx.literal(' USING %s' % self._using)  # MySQL style.
+                   ctx.state.index_using_precedes_table:
+                ctx.literal(f' USING {self._using}')
 
             (ctx
              .literal(' ON ')
@@ -2837,8 +2803,8 @@ class Index(Node):
              .literal(' '))
 
             if self._using is not None and not \
-               ctx.state.index_using_precedes_table:
-                ctx.literal('USING %s ' % self._using)  # Postgres/default.
+                   ctx.state.index_using_precedes_table:
+                ctx.literal(f'USING {self._using} ')
 
             ctx.sql(EnclosedNodeList([
                 SQL(expr) if isinstance(expr, basestring) else expr
@@ -2892,7 +2858,7 @@ class ModelIndex(Index):
 def _truncate_constraint_name(constraint, maxlen=64):
     if len(constraint) > maxlen:
         name_hash = hashlib.md5(constraint.encode('utf-8')).hexdigest()
-        constraint = '%s_%s' % (constraint[:(maxlen - 8)], name_hash[:7])
+        constraint = f'{constraint[:maxlen - 8]}_{name_hash[:7]}'
     return constraint
 
 
@@ -3231,10 +3197,7 @@ class Database(_callable_context_manager):
                     # field object, to apply data-type conversions.
                     if isinstance(k, basestring):
                         k = getattr(query.table, k)
-                    if isinstance(k, Field):
-                        v = k.to_value(v)
-                    else:
-                        v = Value(v, unpack=False)
+                    v = k.to_value(v) if isinstance(k, Field) else Value(v, unpack=False)
                 else:
                     v = QualifiedNames(v)
                 updates.append(NodeList((ensure_entity(k), SQL('='), v)))

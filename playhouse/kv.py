@@ -67,9 +67,11 @@ class KeyValue(object):
         return query
 
     def convert_expression(self, expr):
-        if not isinstance(expr, Expression):
-            return (self.key == expr), True
-        return expr, False
+        return (
+            (expr, False)
+            if isinstance(expr, Expression)
+            else (self.key == expr, True)
+        )
 
     def __contains__(self, key):
         expr, _ = self.convert_expression(key)
@@ -83,7 +85,7 @@ class KeyValue(object):
         query = self.query(self.value).where(converted)
         item_getter = operator.itemgetter(0)
         result = [item_getter(row) for row in query]
-        if len(result) == 0 and is_single:
+        if not result and is_single:
             raise KeyError(expr)
         elif is_single:
             return result[0]
@@ -126,7 +128,7 @@ class KeyValue(object):
 
     def _update(self, __data=None, **mapping):
         if __data is not None:
-            mapping.update(__data)
+            mapping |= __data
         return (self.model
                 .insert_many(list(mapping.items()),
                              fields=[self.key, self.value])
@@ -135,7 +137,7 @@ class KeyValue(object):
 
     def _postgres_update(self, __data=None, **mapping):
         if __data is not None:
-            mapping.update(__data)
+            mapping |= __data
         return (self.model
                 .insert_many(list(mapping.items()),
                              fields=[self.key, self.value])

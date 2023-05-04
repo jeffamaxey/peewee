@@ -30,7 +30,7 @@ def menu_loop():
     choice = None
     while choice != 'q':
         for key, value in menu.items():
-            print('%s) %s' % (key, value.__doc__))
+            print(f'{key}) {value.__doc__}')
         choice = input('Action: ').lower().strip()
         if choice in menu:
             menu[choice]()

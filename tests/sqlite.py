@@ -54,9 +54,7 @@ class WeightedAverage(object):
         self.count += (weight * value)
 
     def finalize(self):
-        if self.total != 0.:
-            return self.count / self.total
-        return 0.
+        return self.count / self.total if self.total != 0. else 0.
 
 def _cmp(l, r):
     if l < r:
@@ -245,7 +243,7 @@ class TestTableFunction(BaseTestCase):
 
         def assertSeries(params, values, extra_sql=''):
             param_sql = ', '.join('?' * len(params))
-            sql = 'SELECT * FROM series(%s)' % param_sql
+            sql = f'SELECT * FROM series({param_sql})'
             if extra_sql:
                 sql = ' '.join((sql, extra_sql))
             curs = self.execute(sql, params)
@@ -419,13 +417,13 @@ class TestJSONField(ModelTestCase):
         # the value in the WHERE clause.
         for i, value in enumerate(test_values):
             # We can create and re-read values.
-            KeyData.create(key='k%s' % i, data=value)
-            kd_db = KeyData.get(KeyData.key == 'k%s' % i)
+            KeyData.create(key=f'k{i}', data=value)
+            kd_db = KeyData.get(KeyData.key == f'k{i}')
             self.assertEqual(kd_db.data, value)
 
             # We can read the data back using the value in the WHERE clause.
             kd_db = KeyData.get(KeyData.data == value)
-            self.assertEqual(kd_db.key, 'k%s' % i)
+            self.assertEqual(kd_db.key, f'k{i}')
 
         # Verify we can use values in UPDATE query.
         kd = KeyData.create(key='kx', data='')
@@ -538,8 +536,9 @@ class TestJSONFieldFunctions(ModelTestCase):
             KeyData.delete().execute()
             for i in range(10):
                 # e.g., {v: 0, v0: {items: []}}, {v: 2, v2: {items: [0, 1]}}
-                KeyData.create(key='k%s' % i, data={'v': i, 'v%s' % i: {
-                    'items': list(range(i))}})
+                KeyData.create(
+                    key=f'k{i}', data={'v': i, f'v{i}': {'items': list(range(i))}}
+                )
 
         jga_key = fn.json_group_array(KeyData.key)
         query = (KeyData
@@ -969,10 +968,7 @@ class TestFullTextSearch(BaseFTSTestCase, ModelTestCase):
         self.assertEqual([round(d.score, 2) for d in query], [-0.] * 5)
 
     def _test_fts_auto(self, ModelClass):
-        posts = []
-        for message in self.messages:
-            posts.append(Post.create(message=message))
-
+        posts = [Post.create(message=message) for message in self.messages]
         # Nothing matches, index is not built.
         pq = ModelClass.select().where(ModelClass.match('faith'))
         self.assertEqual(list(pq), [])
@@ -1756,9 +1752,7 @@ class TestTransitiveClosureIntegration(BaseTestCase):
         return Category, Closure
 
     def assertNodes(self, query, *expected):
-        self.assertEqual(
-            set([category.name for category in query]),
-            set(expected))
+        self.assertEqual({category.name for category in query}, set(expected))
 
     def test_build_tree(self):
         Category, Closure = self.initialize_models()
@@ -1981,10 +1975,10 @@ class TestLSM1Extension(BaseTestCase):
         self.assertEqual(v0_db.val_f, 3.14)
         self.assertEqual(v0_db.val_t, 'v2-e')
 
-        self.assertEqual(len([item for item in KV.select()]), 1)
+        self.assertEqual(len(list(KV.select())), 1)
 
         del KV['k0']
-        self.assertEqual(len([item for item in KV.select()]), 0)
+        self.assertEqual(len(list(KV.select())), 0)
 
     def test_insert_replace(self):
         database.create_tables([KVS])
@@ -2001,7 +1995,7 @@ class TestLSM1Extension(BaseTestCase):
     def test_index_performance(self):
         database.create_tables([KVS])
 
-        data = [{'key': 'k%s' % i, 'value': 'v%s' % i} for i in range(20)]
+        data = [{'key': f'k{i}', 'value': f'v{i}'} for i in range(20)]
         KVS.insert_many(data).execute()
 
         self.assertEqual(KVS.select().count(), 20)
@@ -2037,7 +2031,7 @@ class TestLSM1Extension(BaseTestCase):
 
     def test_index_uint(self):
         database.create_tables([KVI])
-        data = [{'key': i, 'value': 'v%s' % i} for i in range(100)]
+        data = [{'key': i, 'value': f'v{i}'} for i in range(100)]
 
         with database.transaction():
             KVI.insert_many(data).execute()
@@ -2242,7 +2236,7 @@ class TestReadOnly(ModelTestCase):
         User.create(username='foo')
 
         db_filename = self.database.database
-        db = SqliteDatabase('file:%s?mode=ro' % db_filename, uri=True)
+        db = SqliteDatabase(f'file:{db_filename}?mode=ro', uri=True)
         cursor = db.execute_sql('select username from users')
         self.assertEqual(cursor.fetchone(), ('foo',))
 
@@ -2287,15 +2281,16 @@ class TestSqliteReturning(ModelTestCase):
     requires = [Person, User, KVR]
 
     def test_sqlite_returning(self):
-        iq = (User
-              .insert_many([{'username': 'u%s' % i} for i in range(3)])
-              .returning(User.id))
+        iq = User.insert_many([{'username': f'u{i}'} for i in range(3)]).returning(
+            User.id
+        )
         self.assertEqual([r.id for r in iq.execute()], [1, 2, 3])
 
-        res = (User
-               .insert_many([{'username': 'u%s' % i} for i in (4, 5)])
-               .returning(User)
-               .execute())
+        res = (
+            User.insert_many([{'username': f'u{i}'} for i in (4, 5)])
+            .returning(User)
+            .execute()
+        )
         self.assertEqual([(r.id, r.username) for r in res],
                          [(4, 'u4'), (5, 'u5')])
 
@@ -2303,10 +2298,11 @@ class TestSqliteReturning(ModelTestCase):
         res = User.insert(username='u6').execute()
         self.assertEqual(res, 6)
 
-        iq = (User
-              .insert_many([{'username': 'u%s' % i} for i in (7, 8, 9)])
-              .returning(User)
-              .namedtuples())
+        iq = (
+            User.insert_many([{'username': f'u{i}'} for i in (7, 8, 9)])
+            .returning(User)
+            .namedtuples()
+        )
         curs = iq.execute()
         self.assertEqual([u.id for u in curs], [7, 8, 9])
 
@@ -2314,9 +2310,12 @@ class TestSqliteReturning(ModelTestCase):
         p = Person.create(first='f1', last='l1', dob='1990-01-01')
         self.assertEqual(p.id, 1)
 
-        iq = Person.insert_many([
-            {'first': 'f%s' % i, 'last': 'l%s' %i, 'dob': '1990-01-%02d' % i}
-            for i in range(1, 3)])
+        iq = Person.insert_many(
+            [
+                {'first': f'f{i}', 'last': f'l{i}', 'dob': '1990-01-%02d' % i}
+                for i in range(1, 3)
+            ]
+        )
         iq = iq.on_conflict(conflict_target=[Person.first, Person.last],
                             update={'dob': '2000-01-01'})
         p1, p2 = iq.returning(Person).execute()
@@ -2338,12 +2337,12 @@ class TestSqliteReturning(ModelTestCase):
         #self.assertEqual(res, 'k2')
 
         # insert_many() returns the primary-key as usual.
-        iq = (KVR
-              .insert_many([{'key': 'k%s' % i, 'value': i} for i in (3, 4)])
-              .returning(KVR.key))
+        iq = KVR.insert_many(
+            [{'key': f'k{i}', 'value': i} for i in (3, 4)]
+        ).returning(KVR.key)
         self.assertEqual([r.key for r in iq.execute()], ['k3', 'k4'])
 
-        iq = KVR.insert_many([{'key': 'k%s' % i, 'value': i} for i in (4, 5)])
+        iq = KVR.insert_many([{'key': f'k{i}', 'value': i} for i in (4, 5)])
         iq = iq.on_conflict(conflict_target=[KVR.key],
                             update={KVR.value: KVR.value + 10})
         res = iq.returning(KVR).execute()
